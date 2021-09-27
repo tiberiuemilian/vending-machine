@@ -1,0 +1,6 @@
+id;username;password;deposit;role
+1;john;john;0;ADMIN
+2;alice;alice;100;SELLER
+3;tom;tom;0;BUYER
+4;mike;mike;10;BUYER
+5;mia;mia;100;ANONYMOUS
