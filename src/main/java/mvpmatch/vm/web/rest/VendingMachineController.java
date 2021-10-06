@@ -4,31 +4,29 @@ import lombok.extern.slf4j.Slf4j;
 import mvpmatch.vm.service.VendingMachineService;
 
 import javax.annotation.security.RolesAllowed;
-import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
 import javax.validation.Valid;
 import javax.validation.constraints.Min;
-import javax.ws.rs.POST;
-import javax.ws.rs.Path;
-import javax.ws.rs.QueryParam;
-import javax.ws.rs.WebApplicationException;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.SecurityContext;
-import java.security.Principal;
+import java.util.Arrays;
 import java.util.stream.IntStream;
 
 import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
+import static mvpmatch.vm.config.Constants.COIN_TYPES;
 import static mvpmatch.vm.domain.Role.BUYER;
+import static mvpmatch.vm.service.AuthenticationService.getLoggedUserName;
 
 @Slf4j
 @Path("/api")
-//@Produces(MediaType.APPLICATION_JSON)
-//@Consumes(MediaType.APPLICATION_JSON)
-@ApplicationScoped
+@Produces(MediaType.APPLICATION_JSON)
+@Consumes(MediaType.APPLICATION_JSON)
+@RequestScoped
 public class VendingMachineController {
-
-    private static final int[] COIN_TYPES = {5, 10, 20, 50, 100};
 
     final VendingMachineService vendingMachineService;
 
@@ -42,33 +40,21 @@ public class VendingMachineController {
     @RolesAllowed({BUYER})
     public Response deposit(
             @QueryParam("coin") Integer coin,
-            @Valid @Min(value = 0, message = "The value must be positive") @QueryParam("number") int number,
+            @Valid @Min(value = 1, message = "The value must be positive") @QueryParam("number") int number,
             @Context SecurityContext sec) {
 
         if (IntStream.of(COIN_TYPES).noneMatch(coin::equals)) {
-            throw new WebApplicationException("Wrong coin value.", BAD_REQUEST);
+            throw new BadRequestException(Response.status(BAD_REQUEST).entity("Wrong coin value. Allowed coins are: " + Arrays.toString(COIN_TYPES)).build());
         }
 
-        Principal user = sec.getUserPrincipal();
-        if (user == null) {
-            throw new WebApplicationException("Invalid user", BAD_REQUEST);
-        }
-        String userName = user.getName();
-
-        return Response.ok().entity(vendingMachineService.deposit(userName, coin, number)).build();
+        return Response.ok().entity(vendingMachineService.deposit(getLoggedUserName(sec), coin, number)).build();
     }
 
     @POST
     @Path("/reset")
     @RolesAllowed({BUYER})
     public Response reset(@Context SecurityContext sec) {
-        Principal user = sec.getUserPrincipal();
-        if (user == null) {
-            throw new WebApplicationException("Invalid user", BAD_REQUEST);
-        }
-        String userName = user.getName();
-
-        return Response.ok().entity(vendingMachineService.reset(userName)).build();
+        return Response.ok().entity(vendingMachineService.reset(getLoggedUserName(sec))).build();
     }
 
     @POST
@@ -76,16 +62,10 @@ public class VendingMachineController {
     @RolesAllowed({BUYER})
     public Response buy(
             @QueryParam("productId") Long productId,
-            @QueryParam("quantity") Long quantity,
+            @Valid @Min(value = 1, message = "The quantity must be positive") @QueryParam("quantity") Integer quantity,
             @Context SecurityContext sec) {
-        Principal user = sec.getUserPrincipal();
-        if (user == null) {
-            throw new WebApplicationException("Invalid user", BAD_REQUEST);
-        }
-        String userName = user.getName();
 
-        return Response.ok().entity(vendingMachineService.buy(userName, productId, quantity)).build();
+        return Response.ok().entity(vendingMachineService.buy(getLoggedUserName(sec), productId, quantity)).build();
     }
-
 
 }

@@ -1,2 +1,3 @@
+DROP TABLE IF EXISTS `deposit`;
 DROP TABLE IF EXISTS `product`;
 DROP TABLE IF EXISTS `user`;

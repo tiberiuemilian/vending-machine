@@ -1,8 +1,11 @@
 package mvpmatch.vm.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -11,7 +14,6 @@ import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.io.Serializable;
-import java.math.BigDecimal;
 
 /**
  * A Product.
@@ -20,14 +22,14 @@ import java.math.BigDecimal;
 @Table(name = "product")
 @RegisterForReflection
 @Data
-@AllArgsConstructor
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class Product extends PanacheEntityBase implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     @Id
-    @NotNull
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "id", nullable = false)
     public Long id;
@@ -40,18 +42,17 @@ public class Product extends PanacheEntityBase implements Serializable {
     @NotNull
     @Min(0)
     @Column(name = "amount_available", nullable = false)
-    public Long amountAvailable;
+    public Integer amountAvailable;
 
     @NotNull
     @Min(1)
-    @Column(name = "cost", precision = 21, scale = 2, nullable = false)
-//    public BigDecimal cost;
-    public Long cost;
+    @Column(name = "cost", nullable = false)
+    public Integer cost;
 
-//    @OneToOne
-//    @JoinColumn(unique = true)
-//    public User seller;
-    public Long sellerId;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
+    @JsonIgnoreProperties({"username", "password", "deposit", "role"})
+    public User seller;
 
     public static Product update(Product product) {
         if (product == null) {
@@ -78,7 +79,6 @@ public class Product extends PanacheEntityBase implements Serializable {
             return update(product);
         }
     }
-
 
 }
 

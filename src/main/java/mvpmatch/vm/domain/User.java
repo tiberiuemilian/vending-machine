@@ -1,15 +1,20 @@
 package mvpmatch.vm.domain;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import io.quarkus.runtime.annotations.RegisterForReflection;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-import javax.json.bind.annotation.JsonbTransient;
 import javax.persistence.*;
-import javax.validation.constraints.Min;
 import javax.validation.constraints.NotNull;
 import javax.validation.constraints.Size;
 import java.io.Serializable;
+import java.util.*;
+
+import static java.util.Map.entry;
 
 /**
  * An User.
@@ -17,7 +22,10 @@ import java.io.Serializable;
 @Entity
 @Table(name = "user")
 @RegisterForReflection
-@Data
+@Data()
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class User extends PanacheEntityBase implements Serializable {
     private static final long serialVersionUID = 1L;
 
@@ -26,57 +34,55 @@ public class User extends PanacheEntityBase implements Serializable {
     public Long id;
 
     @NotNull
-//    @Pattern(regexp = Constants.LOGIN_REGEX)
     @Size(min = 1, max = 45)
     @Column(name = "username", length = 45, unique = true, nullable = false)
     public String username;
 
     @NotNull
-    @Size(min = 1, max = 45)
-    @Column(name = "password", length = 45, nullable = false)
-    @JsonbTransient
+    @Size(min = 1, max = 100)
+    @Column(name = "password", length = 100, nullable = false)
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     public String password;
 
     @NotNull
-    @Min(0)
-//    @Column(name = "deposit", precision = 21, scale = 2, nullable = false)
-    @Column(name = "deposit", nullable = false)
-//    public BigDecimal deposit;
-    public Long deposit;
+    @ElementCollection
+    @CollectionTable(name = "deposit")
+    @MapKeyColumn(name = "denomination")
+    @Column(name = "nrOfCoins")
+    @org.hibernate.annotations.OrderBy(clause = "denomination DESC")
+    public Map<Integer, Integer> deposit = new HashMap<>();
+
+    public static Map<Integer, Integer> emptyDeposit() {
+        return new TreeMap<>(
+                Map.ofEntries(
+                        entry(100, 0),
+                        entry(50, 0),
+                        entry(20, 0),
+                        entry(10, 0),
+                        entry(5, 0)
+                )
+        ).descendingMap();
+    }
+
+    public static class ReverseComparator implements Comparator<Integer> {
+
+        @Override
+        public int compare(Integer o1, Integer o2) {
+            return o2.compareTo( o1 );
+        }
+    }
 
     @NotNull
     @Size(min = 1, max = 45)
     @Column(name = "role", length = 45, nullable = false)
     public String role;
-
-    public static User update(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("user can't be null");
-        }
-        var entity = User.<User>findById(user.id);
-        if (entity != null) {
-            entity.username = user.username;
-            entity.password = user.password;
-            entity.deposit = user.deposit;
-            entity.role = user.role;
-        }
-        return entity;
-    }
-
-    public static User persistOrUpdate(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("user can't be null");
-        }
-        if (user.id == null) {
-            persist(user);
-            return user;
-        } else {
-            return update(user);
-        }
-    }
     
-    public static User findByUsername(String username) {
-        return find("username", username).firstResult();
+    public static Optional<User> findOneByUsername(String username) {
+        return find("username", username).firstResultOptional();
+    }
+
+    public boolean sellsProduct(Product product) {
+        return (product != null) && getId().equals(product.getSeller().getId());
     }
 }
 

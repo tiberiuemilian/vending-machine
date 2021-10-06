@@ -10,14 +10,14 @@
 <!--    <changeSet id="fake-products" author="tiberiuemilian@gmail.com" context="faker">-->
     <changeSet id="fake-products" author="tiberiuemilian@gmail.com">
         <loadData
-                file="config/liquibase/fake-data/product.csv"
-                separator=";"
-                tableName="product">
-        </loadData>
-        <loadData
                 file="config/liquibase/fake-data/user.csv"
                 separator=";"
                 tableName="user">
+        </loadData>
+        <loadData
+                file="config/liquibase/fake-data/product.csv"
+                separator=";"
+                tableName="product">
         </loadData>
     </changeSet>
 

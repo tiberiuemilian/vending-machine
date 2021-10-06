@@ -3,36 +3,46 @@ package mvpmatch.vm.web.rest;
 import lombok.extern.slf4j.Slf4j;
 import mvpmatch.vm.domain.Product;
 import mvpmatch.vm.domain.User;
+import mvpmatch.vm.service.ProductService;
+import mvpmatch.vm.web.rest.errors.BadRequestAlertException;
 import mvpmatch.vm.web.rest.util.HeaderUtil;
 import mvpmatch.vm.web.rest.util.ResponseUtil;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+import org.eclipse.microprofile.openapi.annotations.parameters.RequestBody;
 
 import javax.annotation.security.RolesAllowed;
-import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.context.RequestScoped;
+import javax.inject.Inject;
 import javax.transaction.Transactional;
 import javax.validation.Valid;
-import javax.validation.constraints.NotNull;
 import javax.ws.rs.*;
 import javax.ws.rs.core.*;
-import java.security.Principal;
 import java.util.List;
 import java.util.Optional;
 
-import static javax.ws.rs.core.Response.Status.BAD_REQUEST;
+import static javax.ws.rs.core.Response.Status.FORBIDDEN;
 import static javax.ws.rs.core.UriBuilder.fromPath;
 import static mvpmatch.vm.domain.Role.SELLER;
+import static mvpmatch.vm.service.AuthenticationService.getLoggedUserName;
 
 @Slf4j
 @Path("/api/products")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
-@ApplicationScoped
+@RequestScoped
 public class ProductResource {
 
     private static final String ENTITY_NAME = "product";
 
     @ConfigProperty(name = "application.name")
     String applicationName;
+
+    final ProductService productService;
+
+    @Inject
+    public ProductResource(ProductService productService) {
+        this.productService = productService;
+    }
 
     /**
      * {@code POST  /products} : Create a new product.
@@ -45,11 +55,8 @@ public class ProductResource {
     @RolesAllowed({SELLER})
     public Response createProduct(@Valid Product product, @Context UriInfo uriInfo, @Context SecurityContext sec) {
         log.debug("REST request to save Product : {}", product);
-
         validateCost(product);
-        validateSellerId(product, sec);
-
-        var result = Product.persistOrUpdate(product);
+        var result = productService.createProduct(getLoggedUserName(sec), product);
         var response = Response.created(fromPath(uriInfo.getPath()).path(result.id.toString()).build()).entity(result);
         HeaderUtil.createEntityCreationAlert(applicationName, true, ENTITY_NAME, result.id.toString()).forEach(response::header);
         return response.build();
@@ -65,40 +72,23 @@ public class ProductResource {
      */
     @PUT
     @Transactional
-    @RolesAllowed("SELLER")
-    public Response updateProduct(@Valid Product product, @Context SecurityContext sec) {
+    @RolesAllowed({SELLER})
+    public Response updateProduct(@Valid @RequestBody Product product, @Context SecurityContext sec) {
         log.debug("REST request to update Product : {}", product);
 
         validateCost(product);
-        validateSellerId(product, sec);
 
-        var result = Product.persistOrUpdate(product);
+        var result = Product.update(product);
         var response = Response.ok().entity(result);
         HeaderUtil.createEntityUpdateAlert(applicationName, true, ENTITY_NAME, product.id.toString()).forEach(response::header);
         return response.build();
     }
 
-    public void validateCost(@Valid Product product) {
+    public void validateCost(Product product) {
         if (product.getCost() == null ||
                 product.getCost() % 5 != 0) {
-            throw new WebApplicationException("Cost must be multiple of 5", BAD_REQUEST);
+            throw new BadRequestAlertException("Product's price must be multiple of 5 in order to give the change.", ENTITY_NAME, "wrongCost");
         }
-    }
-
-    public void validateSellerId(@Valid Product product, SecurityContext sec) {
-        User loggedUser = User.findByUsername(getLoggedUserName(sec));
-        User seller = User.findById(product.getSellerId());
-        if ((seller == null) ||
-                (! seller.equals(loggedUser)) ||
-                        userDontSellProduct(product, seller)) {
-            throw new WebApplicationException("Wrong seller", BAD_REQUEST);
-        }
-    }
-
-    private boolean userDontSellProduct(
-            @Valid @NotNull Product product,
-            @Valid @NotNull User user) {
-        return (user.getId() != product.getSellerId());
     }
 
     /**
@@ -110,27 +100,20 @@ public class ProductResource {
     @DELETE
     @Path("/{id}")
     @Transactional
-    @RolesAllowed("SELLER")
+    @RolesAllowed({SELLER})
     public Response deleteProduct(@PathParam("id") Long id, @Context SecurityContext sec) {
         log.debug("REST request to delete Product : {}", id);
-
+        User loggedUser = User.findOneByUsername(getLoggedUserName(sec)).get();
         Product.<Product>findByIdOptional(id).ifPresent(product -> {
-            validateSellerId(product, sec);
+            if (!loggedUser.sellsProduct(product)) {
+                throw new ForbiddenException(Response.status(FORBIDDEN).entity("Product can be deleted only by its seller.").build());
+            }
             product.delete();
         });
 
         var response = Response.noContent();
         HeaderUtil.createEntityDeletionAlert(applicationName, true, ENTITY_NAME, id.toString()).forEach(response::header);
         return response.build();
-    }
-
-    private String getLoggedUserName(@Context SecurityContext sec) {
-        Principal user = sec.getUserPrincipal();
-        if (user == null) {
-            throw new WebApplicationException("Invalid user", BAD_REQUEST);
-        }
-        String userName = user.getName();
-        return userName;
     }
 
     /**
@@ -157,4 +140,5 @@ public class ProductResource {
         Optional<Product> product = Product.findByIdOptional(id);
         return ResponseUtil.wrapOrNotFound(product);
     }
+
 }
